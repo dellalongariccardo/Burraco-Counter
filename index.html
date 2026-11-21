@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Burraco">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#173f30">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
+<title>Burraco – Punteggio da foto</title>
+<style>
+:root{--felt:#173f30;--felt2:#1f5441;--card:#fbf7ec;--ink:#1d1a16;--mute:#6d675c;--red:#b3261e;--gold:#d9b25f;--line:#e4dccb}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--felt);color:var(--ink);font:16px/1.4 Georgia,"Times New Roman",serif}
+body{padding:env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 24px)}
+main{max-width:560px;margin:0 auto}
+h1{color:var(--card);font-size:28px;margin:22px 0 4px;letter-spacing:.2px}
+.sub{color:#b9d1c4;margin:0 0 18px;font-size:15px}
+.panel{background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px}
+.panel h2{margin:0 0 10px;font-size:18px}
+label{display:block;font-size:14px;color:var(--mute);margin:10px 0 4px}
+input[type=text],input[type=password]{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;padding:14px 0;border-radius:12px;border:2px solid var(--line);background:#fff;font:600 20px Georgia,serif;color:var(--ink)}
+.seg button.on{border-color:var(--felt2);background:var(--felt2);color:#fff}
+.btn{display:block;width:100%;padding:14px;border:0;border-radius:12px;background:var(--gold);color:#2a2008;font:700 17px Georgia,serif;margin-top:12px}
+.btn.alt{background:transparent;border:2px solid var(--line);color:var(--ink)}
+.btn.sm{display:inline-block;width:auto;padding:10px 14px;font-size:15px;margin:0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.shots{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.shot{border:2px dashed var(--line);border-radius:12px;padding:10px;text-align:center;background:#fff;font:inherit;color:var(--ink)}
+.shot b{display:block;font-size:15px}
+.shot small{color:var(--mute)}
+.shot.done{border-style:solid;border-color:var(--felt2)}
+.shot .n{font-size:26px;font-weight:700;display:block;margin-top:2px}
+.shot.loading{opacity:.6}
+.cards{font-size:13px;color:var(--mute);margin:4px 0}
+.tot{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
+.tot span{color:var(--mute)}.tot strong{font-size:26px}
+.neg{color:var(--red)}
+.bon{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:14px;margin-top:8px}
+.bon label{margin:0;display:flex;align-items:center;gap:8px;color:var(--ink)}
+.bon input{width:22px;height:22px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+td,th{padding:8px 4px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+.err{background:#fde7e4;color:#7a1710;padding:10px;border-radius:10px;margin:8px 0;font-size:14px}
+.hint{font-size:13px;color:var(--mute)}
+.hidden{display:none}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Burraco</h1>
+<p class="sub">Fotografa le carte, il punteggio lo calcola l’app.</p>
+
+<section id="setup" class="panel">
+  <h2>Partecipanti</h2>
+  <div class="seg" id="np"><button data-n="2">2</button><button data-n="3">3</button><button data-n="4" class="on">4</button></div>
+  <div id="names"></div>
+  <button class="btn" id="start">Inizia la partita</button>
+</section>
+
+<section id="game" class="hidden">
+  <div class="panel" id="totals"></div>
+  <div id="round"></div>
+  <button class="btn" id="endRound">Chiudi mano e somma i punti</button>
+  <button class="btn alt" id="reset" style="color:#fff;border-color:#4d7a66">Nuova partita</button>
+</section>
+
+<section class="panel" id="settings">
+  <h2>Chiave Anthropic</h2>
+  <p class="hint">Serve per leggere le carte dalle foto. Resta salvata solo su questo iPhone e viene inviata solo ad Anthropic.</p>
+  <label for="key">API key</label>
+  <input type="password" id="key" placeholder="sk-ant-..." autocomplete="off">
+  <label for="model">Modello</label>
+  <input type="text" id="model" autocapitalize="off" autocorrect="off">
+  <button class="btn alt sm" id="saveKey" style="margin-top:12px">Salva</button>
+</section>
+</main>
+
+<input type="file" id="cam" accept="image/*" capture="environment">
+
+<script>
+const VAL={"2":20,"A":15,"JK":30,"3":5,"4":5,"5":5,"6":5,"7":5,"8":10,"9":10,"10":10,"J":10,"Q":10,"K":10};
+const K={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+const $=s=>document.querySelector(s);
+let N=4,S=null,pending=null;
+
+/* ---------- stato ---------- */
+function load(){try{S=JSON.parse(K.get('burraco')||'null')}catch(e){S=null}}
+function save(){K.set('burraco',JSON.stringify(S))}
+function newRound(){return S.names.map(()=>({table:null,hand:null,pul:0,spo:0,chiu:false,poz:false}))}
+
+/* ---------- setup ---------- */
+function drawNames(){
+  $('#names').innerHTML=Array.from({length:N},(_,i)=>`<label>Giocatore ${i+1}</label><input type="text" id="n${i}" value="${(S&&S.names[i])||''}" placeholder="Nome">`).join('');
+}
+$('#np').onclick=e=>{const b=e.target.closest('button');if(!b)return;N=+b.dataset.n;[...$('#np').children].forEach(x=>x.classList.toggle('on',x===b));drawNames()};
+$('#start').onclick=()=>{
+  const names=Array.from({length:N},(_,i)=>$('#n'+i).value.trim()||'Giocatore '+(i+1));
+  S={names,totals:names.map(()=>0),hist:[],round:null};S.round=newRound();save();show();
+};
+$('#reset').onclick=()=>{if(confirm('Cancellare la partita in corso?')){S=null;K.set('burraco','');show()}};
+$('#saveKey').onclick=()=>{K.set('bkey',$('#key').value.trim());K.set('bmodel',$('#model').value.trim()||'claude-sonnet-5-5');alert('Salvato')};
+
+/* ---------- calcolo ---------- */
+const sum=cs=>cs.reduce((a,c)=>a+(VAL[c]||0),0);
+function tableScore(r){
+  if(!r.table)return 0;
+  const cards=r.table.melds.flatMap(m=>m.cards);
+  return sum(cards);
+}
+function playerScore(r){
+  return tableScore(r)+r.pul*200+r.spo*100+(r.chiu?100:0)-(r.poz?100:0)-(r.hand?sum(r.hand.cards):0);
+}
+
+/* ---------- UI partita ---------- */
+function show(){
+  const on=!!S;
+  $('#setup').classList.toggle('hidden',on);
+  $('#game').classList.toggle('hidden',!on);
+  if(!on){drawNames();return}
+  $('#totals').innerHTML='<h2>Classifica</h2><table><tr><th></th>'+S.names.map(n=>`<th>${esc(n)}</th>`).join('')+'</tr>'
+   +S.hist.map((h,i)=>`<tr><td>Mano ${i+1}</td>`+h.map(p=>`<td class="${p<0?'neg':''}">${p}</td>`).join('')+'</tr>').join('')
+   +'<tr><td><b>Totale</b></td>'+S.totals.map(t=>`<td><b class="${t<0?'neg':''}">${t}</b></td>`).join('')+'</tr></table>';
+  $('#round').innerHTML=S.round.map((r,i)=>{
+    const tn=r.table?tableScore(r):null,hn=r.hand?sum(r.hand.cards):null;
+    return `<div class="panel"><h2>${esc(S.names[i])}</h2>
+    <div class="shots">
+     <button class="shot ${r.table?'done':''}" data-i="${i}" data-k="table"><b>Carte a terra</b>${tn===null?'<small>Scatta foto</small>':`<span class="n">+${tn}</span><small>tocca per rifare</small>`}</button>
+     <button class="shot ${r.hand?'done':''}" data-i="${i}" data-k="hand"><b>Carte in mano</b>${hn===null?'<small>Scatta foto</small>':`<span class="n neg">−${hn}</span><small>tocca per rifare</small>`}</button>
+    </div>
+    ${r.table?`<div class="cards">A terra: ${r.table.melds.map(m=>m.cards.join(' ')+(m.burraco?' ('+m.burraco+')':'')).join(' | ')}</div>`:''}
+    ${r.hand?`<div class="cards">In mano: ${r.hand.cards.join(' ')||'nessuna'}</div>`:''}
+    <div class="bon">
+     <label>Burraco puliti <input type="number" min="0" max="9" value="${r.pul}" data-i="${i}" data-k="pul" style="width:54px;padding:6px"></label>
+     <label>Burraco sporchi <input type="number" min="0" max="9" value="${r.spo}" data-i="${i}" data-k="spo" style="width:54px;padding:6px"></label>
+     <label><input type="checkbox" ${r.chiu?'checked':''} data-i="${i}" data-k="chiu"> Ha chiuso (+100)</label>
+     <label><input type="checkbox" ${r.poz?'checked':''} data-i="${i}" data-k="poz"> Pozzetto non preso (−100)</label>
+    </div>
+    <div class="tot"><span>Punti della mano</span><strong class="${playerScore(r)<0?'neg':''}">${playerScore(r)}</strong></div></div>`}).join('');
+}
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+$('#round').onclick=e=>{
+  const b=e.target.closest('.shot');if(!b)return;
+  pending={i:+b.dataset.i,k:b.dataset.k,el:b};$('#cam').value='';$('#cam').click();
+};
+$('#round').onchange=e=>{
+  const t=e.target,i=t.dataset.i;if(i===undefined)return;
+  const r=S.round[+i],k=t.dataset.k;
+  r[k]=t.type==='checkbox'?t.checked:Math.max(0,+t.value||0);save();show();
+};
+$('#endRound').onclick=()=>{
+  if(!confirm('Sommare i punti di questa mano al totale?'))return;
+  const pts=S.round.map(playerScore);
+  S.hist.push(pts);S.totals=S.totals.map((t,i)=>t+pts[i]);S.round=newRound();save();show();window.scrollTo(0,0);
+};
+
+/* ---------- foto + lettura ---------- */
+$('#cam').onchange=async e=>{
+  const f=e.target.files[0];if(!f||!pending)return;
+  const {i,k,el}=pending;pending=null;
+  document.querySelectorAll('.err').forEach(x=>x.remove());
+  el.classList.add('loading');el.querySelector('small')&&(el.querySelector('small').textContent='Leggo le carte…');
+  try{
+    const img=await shrink(f);
+    const out=await ask(img,k);
+    S.round[i][k]=k==='table'?{melds:out.melds||[]}:{cards:out.cards||[]};
+    if(k==='table'){
+      const m=S.round[i].table.melds;
+      S.round[i].pul=m.filter(x=>x.burraco==='pulito').length;
+      S.round[i].spo=m.filter(x=>x.burraco==='sporco').length;
+    }
+    save();show();
+  }catch(err){
+    show();
+    const d=document.createElement('div');d.className='err';d.textContent=err.message;
+    $('#round').prepend(d);
+  }
+};
+function shrink(file){
+  return new Promise((res,rej)=>{
+    const u=URL.createObjectURL(file),im=new Image();
+    im.onload=()=>{const m=1600,s=Math.min(1,m/Math.max(im.width,im.height));
+      const c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;
+      c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);
+      res(c.toDataURL('image/jpeg',.85).split(',')[1])};
+    im.onerror=()=>rej(new Error('Foto non leggibile'));im.src=u;
+  });
+}
+const FMT='Valori ammessi per ogni carta: A,2,3,4,5,6,7,8,9,10,J,Q,K oppure JK per il jolly. Ignora il seme. Rispondi SOLO con JSON valido, senza testo né backtick.';
+const PROMPTS={
+ table:'Foto di un tavolo da Burraco: le carte calate (combinazioni) di un giocatore. Distingui ogni combinazione (tris o scala) separata sul tavolo e elenca tutte le carte visibili di ciascuna. Se una combinazione ha 7 o più carte, imposta "burraco": "pulito" se non contiene jolly né 2 usati come jolly, altrimenti "sporco"; per le altre null. '+FMT+' Formato: {"melds":[{"cards":["7","8","9"],"burraco":null}]}',
+ hand:'Foto delle carte che un giocatore tiene ancora in mano. Elenca ogni carta visibile, una volta sola. '+FMT+' Formato: {"cards":["K","5","JK"]}'
+};
+async function ask(b64,kind){
+  const key=K.get('bkey');if(!key)throw new Error('Inserisci prima la chiave Anthropic in fondo alla pagina.');
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{
+    'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:K.get('bmodel')||'claude-sonnet-5-5',max_tokens:1000,messages:[{role:'user',content:[
+      {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:PROMPTS[kind]}]}]})});
+  const d=await r.json();
+  if(!r.ok)throw new Error('Errore API: '+(d.error&&d.error.message||r.status));
+  const t=d.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim();
+  try{return JSON.parse(t)}catch(e){throw new Error('Risposta non leggibile, riprova con una foto più nitida.')}
+}
+
+/* ---------- avvio ---------- */
+$('#key').value=K.get('bkey')||'';$('#model').value=K.get('bmodel')||'claude-sonnet-5-5';
+load();show();
+</script>
+</body>
+</html>
